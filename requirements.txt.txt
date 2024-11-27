@@ -1,0 +1,6 @@
+Flask==2.3.3
+python-telegram-bot==20.3
+numpy
+pandas
+scikit-learn
+yfinance
