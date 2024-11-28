@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 import yfinance as yf
 
 # Initialisation des paramètres Telegram
-TELEGRAM_TOKEN = os.getenv(« TELEGRAM_TOKEN »)
+TELEGRAM_TOKEN = os.getenv(“ TELEGRAM_TOKEN “)
 CHAT_ID = os.getenv(« CHAT_ID »)
 bot = Bot(token=TELEGRAM_TOKEN)
 
@@ -39,14 +39,10 @@ def train_ml_model(data, target):
 # Fonction pour calculer les indicateurs techniques
 def calculate_indicators(prices):
     # Calculer des indicateurs plus complets (SMA, EMA, RSI, MACD, Bollinger Bands, etc.)
-    # ...
-
     # Exemple simple :
     sma_short = prices[-10:].mean()
     sma_long = prices[-20:].mean()
-    # ... d’autres indicateurs
-
-    return sma_short, sma_long, ...
+    return sma_short, sma_long
 
 # Fonction pour analyser les signaux avec le modèle ML
 def analyze_signals(prices, model):
@@ -60,17 +56,16 @@ def analyze_signals(prices, model):
     # Signal basé sur le modèle ML
     buy_signal = prediction[0] == 1
 
-    # Calculer stop-loss et take-profit dynamiques (basés sur des indicateurs techniques)
-    # ...
-
-    return buy_signal, stop_loss, take_profit
+    return buy_signal
 
 # Fonction principale pour analyser une crypto
 def analyze_crypto(crypto, model):
     prices = fetch_crypto_data(crypto)
     if prices is not None:
-        buy_signal, stop_loss, take_profit = analyze_signals(prices, model)
-        # ... (même logique que précédemment)
+        buy_signal = analyze_signals(prices, model)
+        if buy_signal:
+            message = f »Buy Signal for {crypto} »
+            bot.send_message(chat_id=CHAT_ID, text=message)
 
 # Fonction principale
 def main():
@@ -79,7 +74,7 @@ def main():
     # Créer des features (indicateurs techniques)
     features = calculate_indicators(data)
     # Créer des targets (signaux d’achat/vente basés sur une stratégie manuelle ou un autre modèle)
-    targets = ...
+    targets = np.random.choice([0, 1], size=len(features))  # Exemple aléatoire pour l’entraînement
 
     # Entraîner le modèle
     model = train_ml_model(features, targets)
