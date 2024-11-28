@@ -1,3 +1,4 @@
+import os
 import requests
 import numpy as np
 import pandas as pd
@@ -6,13 +7,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from telegram import Bot
 from concurrent.futures import ThreadPoolExecutor
-import os  # Pour accéder aux variables d'environnement
 from flask import Flask
+from gunicorn.app.base import BaseApplication
 
 # Charger les variables d'environnement depuis Render (pas besoin de fichier .env)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Clé API de Telegram
 CHAT_ID = os.getenv("CHAT_ID")  # ID du chat Telegram
 PORT = int(os.getenv("PORT", 10000))  # Convertit en entier pour Flask
+
 # Vérification des variables d'environnement
 if not TELEGRAM_TOKEN or not CHAT_ID:
     raise ValueError("Les variables d'environnement TELEGRAM_TOKEN ou CHAT_ID ne sont pas définies.")
@@ -60,7 +62,6 @@ def train_ml_model():
 
 # Fonction pour analyser les signaux avec le modèle ML
 def analyze_signals(prices, model):
-    # Calcul des indicateurs
     sma_short = prices[-10:].mean()
     sma_long = prices[-20:].mean()
     ema_short = prices[-12:].mean()
@@ -72,14 +73,10 @@ def analyze_signals(prices, model):
     upper_band = sma + (2 * std_dev)
     lower_band = sma - (2 * std_dev)
 
-    # Préparer les données pour le modèle
     features = np.array([sma_short, sma_long, macd, upper_band, lower_band]).reshape(1, -1)
     prediction = model.predict(features)
-
-    # Signal basé sur le modèle ML
+    
     buy_signal = prediction[0] == 1
-
-    # Stop-loss et take-profit dynamiques
     stop_loss = prices[-1] - 2 * atr
     take_profit = prices[-1] + 3 * atr
 
@@ -128,40 +125,18 @@ def main():
             executor.map(lambda crypto: analyze_crypto(crypto, model), CRYPTO_LIST)
         time.sleep(300)  # Attendre 5 minutes avant de vérifier à nouveau
 
-if __name__ == "__main__":
-    from gunicorn.app.base import BaseApplication
-    from gunicorn.six import iteritems
-
-    class GunicornApp(BaseApplication):
-        def __init__(self, app):
-            self.app = app
-            super().__init__()
-
-        import os
-from flask import Flask
-from gunicorn.app.base import BaseApplication
-
-# Créez l'instance de l'application Flask
-app = Flask(__name__)
-
-# Route pour tester si l'application fonctionne
-@app.route('/')
-def home():
-    return "Application Flask fonctionne !"
-
-# Récupérer le port depuis la variable d'environnement ou utiliser 10000 par défaut
-PORT = int(os.environ.get("PORT", 10000))
-
-# Créer une classe Gunicorn pour démarrer l'application Flask avec Gunicorn
+# Classe Gunicorn pour démarrer l'application Flask avec Gunicorn
 class GunicornApp(BaseApplication):
+    def __init__(self, app):
+        self.app = app
+        super().__init__()
+
     def load(self):
-        return app
+        return self.app
 
     def run(self):
         super().run()
 
 # Si exécuté directement, démarre le serveur avec Gunicorn
 if __name__ == "__main__":
-    # Si vous êtes en local, vous pouvez utiliser cette ligne pour tester sans Gunicorn.
-    # Pour Render ou en production, vous utilisez Gunicorn (ligne suivante).
-    app.run(host="0.0.0.0", port=PORT)  # C'est pour un test local sans Gunicorn
+    GunicornApp(app).run()
