@@ -10,12 +10,12 @@ import yfinance as yf
 import os
 
 # Initialize Telegram parameters
-TELEGRAM_TOKEN = os.getenv(« TELEGRAM_TOKEN »)  # Correct quotes here
-CHAT_ID = os.getenv(« CHAT_ID »)  # Correct quotes here
+TELEGRAM_TOKEN = os.getenv(“TELEGRAM_TOKEN”)  # Use straight quotes 
+CHAT_ID = os.getenv(“CHAT_ID”)
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # List of cryptocurrencies to monitor
-CRYPTO_LIST = [« BTC-USD », « ETH-USD », « ADA-USD »]  # Use Yahoo Finance tickers
+CRYPTO_LIST = [« BTC-USD », « ETH-USD », « ADA-USD »]
 
 # Performance tracking file
 PERFORMANCE_LOG = « trading_performance.csv »
