@@ -12,8 +12,7 @@ from flask import Flask
 # Charger les variables d'environnement depuis Render (pas besoin de fichier .env)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Clé API de Telegram
 CHAT_ID = os.getenv("CHAT_ID")  # ID du chat Telegram
-PORT = os.getenv("PORT", 10000)  # Spécification du port (par défaut 10000)
-
+PORT = int(os.getenv("PORT", 10000))  # Convertit en entier pour Flask
 # Vérification des variables d'environnement
 if not TELEGRAM_TOKEN or not CHAT_ID:
     raise ValueError("Les variables d'environnement TELEGRAM_TOKEN ou CHAT_ID ne sont pas définies.")
