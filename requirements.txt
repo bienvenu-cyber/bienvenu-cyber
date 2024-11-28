@@ -4,3 +4,5 @@ numpy
 pandas
 scikit-learn
 yfinance
+
+gunicorn
