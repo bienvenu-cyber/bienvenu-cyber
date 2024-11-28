@@ -10,8 +10,8 @@ import yfinance as yf
 import os
 
 # Initialize Telegram parameters
-TELEGRAM_TOKEN = os.getenv(« TELEGRAM_TOKEN »)  # Use straight quotes
-CHAT_ID = os.getenv(« CHAT_ID »)  # Use straight quotes
+TELEGRAM_TOKEN = os.getenv(« TELEGRAM_TOKEN »)  # Correct quotes here
+CHAT_ID = os.getenv(« CHAT_ID »)  # Correct quotes here
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # List of cryptocurrencies to monitor
