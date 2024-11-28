@@ -10,18 +10,18 @@ import yfinance as yf
 import os
 
 # Initialisation des paramètres Telegram
-TELEGRAM_TOKEN = os.getenv(“TELEGRAM_TOKEN”)  # Utilisation des guillemets droits
-CHAT_ID = os.getenv(“CHAT_ID”)  # Utilisation des guillemets droits
+TELEGRAM_TOKEN = os.getenv(« TELEGRAM_TOKEN »)  # Utilisation des guillemets droits
+CHAT_ID = os.getenv(« CHAT_ID »)  # Utilisation des guillemets droits
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # Liste des cryptomonnaies à surveiller
-CRYPTO_LIST = [“BTC-USD”, “ETH-USD”, “ADA-USD”]  # Utiliser les tickers de yfinance
+CRYPTO_LIST = [« BTC-USD », « ETH-USD », « ADA-USD »]  # Utiliser les tickers de yfinance
 
 # Fichier de suivi des performances
-PERFORMANCE_LOG = “trading_performance.csv”
+PERFORMANCE_LOG = « trading_performance.csv »
 
 # Fonction pour récupérer les données historiques avec yfinance
-def fetch_crypto_data(crypto_id, period=“1y”):
+def fetch_crypto_data(crypto_id, period=« 1y »):
     data = yf.download(crypto_id, period=period)
     return data[‘Close’].values
 
@@ -69,12 +69,12 @@ def analyze_crypto(crypto, model):
         buy_signal, stop_loss, take_profit = analyze_signals(prices, model)
         # Envoi des alertes si un signal d’achat est détecté
         if buy_signal:
-            bot.send_message(CHAT_ID, f”Achat recommandé pour {crypto} avec Stop-Loss: {stop_loss}, Take-Profit: {take_profit}”)
+            bot.send_message(CHAT_ID, f »Achat recommandé pour {crypto} avec Stop-Loss: {stop_loss}, Take-Profit: {take_profit} »)
 
 # Fonction principale
 def main():
     # Charger des données historiques pour l’entraînement (à remplacer par vos propres données)
-    data = fetch_crypto_data(“BTC-USD”, “5y”)
+    data = fetch_crypto_data(« BTC-USD », « 5y »)
     # Créer des features (indicateurs techniques)
     features = calculate_indicators(data)
     # Créer des targets (signaux d’achat/vente basés sur une stratégie manuelle ou un autre modèle)
@@ -88,5 +88,5 @@ def main():
             executor.map(lambda crypto: analyze_crypto(crypto, model), CRYPTO_LIST)
         time.sleep(300)  # Pause de 5 minutes entre les analyses
 
-if __name__ == “__main__”:
+if __name__ == « __main__ »:
     main()
