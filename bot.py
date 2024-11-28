@@ -137,8 +137,31 @@ if __name__ == "__main__":
             self.app = app
             super().__init__()
 
-        def load(self):
-            return self.app
+        import os
+from flask import Flask
+from gunicorn.app.base import BaseApplication
 
-    # Démarrer l'application Flask avec Gunicorn
-    GunicornApp(app).run()
+# Créez l'instance de l'application Flask
+app = Flask(__name__)
+
+# Route pour tester si l'application fonctionne
+@app.route('/')
+def home():
+    return "Application Flask fonctionne !"
+
+# Récupérer le port depuis la variable d'environnement ou utiliser 10000 par défaut
+PORT = int(os.environ.get("PORT", 10000))
+
+# Créer une classe Gunicorn pour démarrer l'application Flask avec Gunicorn
+class GunicornApp(BaseApplication):
+    def load(self):
+        return app
+
+    def run(self):
+        super().run()
+
+# Si exécuté directement, démarre le serveur avec Gunicorn
+if __name__ == "__main__":
+    # Si vous êtes en local, vous pouvez utiliser cette ligne pour tester sans Gunicorn.
+    # Pour Render ou en production, vous utilisez Gunicorn (ligne suivante).
+    app.run(host="0.0.0.0", port=PORT)  # C'est pour un test local sans Gunicorn
