@@ -10,18 +10,18 @@ import yfinance as yf
 import os
 
 # Initialize Telegram parameters
-TELEGRAM_TOKEN = os.getenv(“TELEGRAM_TOKEN”)   
-CHAT_ID = os.getenv(“CHAT_ID”)
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  
+CHAT_ID = os.getenv("CHAT_ID")  
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # List of cryptocurrencies to monitor
-CRYPTO_LIST = [« BTC-USD », « ETH-USD », « ADA-USD »]
+CRYPTO_LIST = [“BTC-USD”, “ETH-USD”, “ADA-USD”]  # Use Yahoo Finance tickers
 
 # Performance tracking file
-PERFORMANCE_LOG = « trading_performance.csv »
+PERFORMANCE_LOG = “trading_performance.csv”
 
 # Function to fetch historical data using yfinance
-def fetch_crypto_data(crypto_id, period=« 1y »):
+def fetch_crypto_data(crypto_id, period=“1y”):
     data = yf.download(crypto_id, period=period)
     return data[‘Close’].values
 
@@ -69,12 +69,12 @@ def analyze_crypto(crypto, model):
         buy_signal, stop_loss, take_profit = analyze_signals(prices, model)
         # Send alerts if a buy signal is detected
         if buy_signal:
-            bot.send_message(CHAT_ID, f »Recommended to buy {crypto} with Stop-Loss: {stop_loss}, Take-Profit: {take_profit} »)
+            bot.send_message(CHAT_ID, f”Recommended to buy {crypto} with Stop-Loss: {stop_loss}, Take-Profit: {take_profit}”)
 
 # Main function
 def main():
     # Load historical data for training (replace with your own data)
-    data = fetch_crypto_data(« BTC-USD », « 5y »)
+    data = fetch_crypto_data(“BTC-USD”, “5y”)
     # Create features (technical indicators)
     features = calculate_indicators(data)
     # Create targets (buy/sell signals based on manual strategy or another model)
@@ -88,5 +88,5 @@ def main():
             executor.map(lambda crypto: analyze_crypto(crypto, model), CRYPTO_LIST)
         time.sleep(300)  # Wait 5 minutes before the next analysis
 
-if __name__ == « __main__ »:
+if __name__ == “__main__”:
     main()
