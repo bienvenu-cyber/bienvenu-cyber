@@ -1,20 +1,26 @@
+import os
 import requests
 import numpy as np
 import pandas as pd
 import time
-from flask import Flask, jsonify, request
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from telegram import Bot
 from concurrent.futures import ThreadPoolExecutor
+from flask import Flask
+from flask import jsonify
 
-# initialisation des variables d'environnement
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+# Charger les variables d'environnement depuis Render
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Clé API de Telegram
+CHAT_ID = os.getenv("CHAT_ID")  # ID du chat Telegram
+PORT = int(os.getenv("PORT", 5000))  # Port pour l'application Flask
 
+# Vérification des variables d'environnement
 if not TELEGRAM_TOKEN or not CHAT_ID:
-    raise ValueError("Les variables TELEGRAM_TOKEN et CHAT_ID doivent être définies dans l'environnement.")
+    raise ValueError("Les variables d'environnement TELEGRAM_TOKEN ou CHAT_ID ne sont pas définies.")
 
+# Initialisation du bot Telegram
+bot = Bot(token=TELEGRAM_TOKEN)
 
 # Liste des cryptomonnaies à surveiller
 CRYPTO_LIST = ["bitcoin", "ethereum", "cardano"]
@@ -22,7 +28,7 @@ CRYPTO_LIST = ["bitcoin", "ethereum", "cardano"]
 # Fichier de suivi des performances
 PERFORMANCE_LOG = "trading_performance.csv"
 
-# Flask app
+# Initialisation de Flask
 app = Flask(__name__)
 
 # Fonction pour récupérer les données de l'API CoinGecko
@@ -111,14 +117,17 @@ def analyze_crypto(crypto, model):
         else:
             log_performance(crypto, prices[-1], stop_loss, take_profit, "Pas de signal")
 
-# Route Flask pour démarrer l'analyse des cryptos
-@app.route('/start_analysis', methods=['GET'])
+# Route principale Flask pour démarrer l'analyse
+@app.route("/")
 def start_analysis():
     model = train_ml_model()  # Entraîner le modèle ML
-    with ThreadPoolExecutor() as executor:
-        executor.map(lambda crypto: analyze_crypto(crypto, model), CRYPTO_LIST)
-    return jsonify({"status": "Analysis started successfully"}), 200
+    while True:
+        with ThreadPoolExecutor() as executor:
+            executor.map(lambda crypto: analyze_crypto(crypto, model), CRYPTO_LIST)
+        time.sleep(300)  # Attendre 5 minutes avant de vérifier à nouveau
+    return jsonify({"message": "Bot is running"}), 200
 
-# Fonction principale pour exécuter le serveur Flask
+# Fonction principale
 if __name__ == "__main__":
-    app.run(port=5000)  # Lancer Flask sur le port 5000
+    # Lancer l'application Flask sur le port spécifié
+    app.run(host="0.0.0.0", port=PORT)
