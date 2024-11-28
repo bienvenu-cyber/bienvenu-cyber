@@ -10,7 +10,7 @@ import yfinance as yf
 import os
 
 # Initialize Telegram parameters
-TELEGRAM_TOKEN = os.getenv(“TELEGRAM_TOKEN”)  # Use straight quotes 
+TELEGRAM_TOKEN = os.getenv(“TELEGRAM_TOKEN”)   
 CHAT_ID = os.getenv(“CHAT_ID”)
 bot = Bot(token=TELEGRAM_TOKEN)
 
