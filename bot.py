@@ -1,99 +1,112 @@
-import os
-import logging
-import time
-from concurrent.futures import ThreadPoolExecutor
-
+import requests
 import numpy as np
 import pandas as pd
-import yfinance as yf
-from flask import Flask, request
+import time
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from telegram import Bot
+from concurrent.futures import ThreadPoolExecutor
+import yfinance as yf
+from flask import Flask
+import os
+import threading
 
-# Configuration des logs
-logging.basicConfig(level=logging.INFO)
-
-# Initialisation des variables d'environnement
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-
-if not TELEGRAM_TOKEN or not CHAT_ID:
-    raise ValueError("Les variables TELEGRAM_TOKEN et CHAT_ID doivent être définies dans l'environnement.")
-
-# Initialisation du bot Telegram
+# Initialisation des paramètres Telegram
+TELEGRAM_TOKEN = os.getenv(« TELEGRAM_TOKEN »)
+CHAT_ID = os.getenv(« CHAT_ID »)
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # Liste des cryptomonnaies à surveiller
-CRYPTO_LIST = ["BTC-USD", "ETH-USD", "ADA-USD"]  # Utiliser les tickers de yfinance
+CRYPTO_LIST = [« BTC-USD », « ETH-USD », « ADA-USD »]  # Utiliser les tickers de yfinance
 
-# Application Flask pour le service web
+# Fichier de suivi des performances
+PERFORMANCE_LOG = « trading_performance.csv »
+
+# Création de l’application Flask
 app = Flask(__name__)
 
-# Fonction pour récupérer les données historiques avec yfinance
-def fetch_crypto_data(crypto_id, period="1y"):
-    logging.info(f"Téléchargement des données pour {crypto_id}")
-    data = yf.download(crypto_id, period=period)
-    if data.empty:
-        logging.warning(f"Aucune donnée trouvée pour {crypto_id}")
-        return None
-    return data['Close'].values
+@app.route(‘/‘)
+def home():
+    return « Service is running! »
 
-# Fonction pour entraîner un modèle de machine learning
+# Fonction pour récupérer les données historiques avec yfinance
+def fetch_crypto_data(crypto_id, period=« 1y »):
+    data = yf.download(crypto_id, period=period)
+    return data[‘Close’].values
+
+# Fonction pour entraîner un modèle de machine learning (à améliorer)
 def train_ml_model(data, target):
+    # Division des données en ensemble d’entraînement et de test
     X_train, X_test, y_train, y_test = train_test_split(data, target, test_size=0.2, random_state=42)
+
+    # Modèle de régression logistique (à remplacer par un modèle plus complexe si nécessaire)
     model = LogisticRegression()
     model.fit(X_train, y_train)
+
     return model
 
 # Fonction pour calculer les indicateurs techniques
 def calculate_indicators(prices):
+    # Calculer des indicateurs plus complets (SMA, EMA, RSI, MACD, Bollinger Bands, etc.)
+    # Exemple simple :
     sma_short = prices[-10:].mean()
     sma_long = prices[-20:].mean()
-    return [sma_short, sma_long]
+    return sma_short, sma_long
 
 # Fonction pour analyser les signaux avec le modèle ML
 def analyze_signals(prices, model):
+    # Calculer les indicateurs
     indicators = calculate_indicators(prices)
+
+    # Préparer les données pour le modèle
     features = np.array(indicators).reshape(1, -1)
     prediction = model.predict(features)
+
+    # Signal basé sur le modèle ML
     buy_signal = prediction[0] == 1
-    stop_loss, take_profit = None, None  # À calculer dynamiquement
+
+    # Calculer stop-loss et take-profit dynamiques (basés sur des indicateurs techniques)
+    stop_loss = 0.95  # Exemple (à améliorer)
+    take_profit = 1.05  # Exemple (à améliorer)
+
     return buy_signal, stop_loss, take_profit
 
-# Fonction principale pour analyser une crypto
+# Fonction pour analyser une crypto
 def analyze_crypto(crypto, model):
     prices = fetch_crypto_data(crypto)
     if prices is not None:
-        try:
-            buy_signal, stop_loss, take_profit = analyze_signals(prices, model)
-            if buy_signal:
-                message = f"Signal d'achat détecté pour {crypto} ! 🚀\nStop Loss : {stop_loss}\nTake Profit : {take_profit}"
-                bot.send_message(chat_id=CHAT_ID, text=message)
-                logging.info(f"Message envoyé : {message}")
-        except Exception as e:
-            logging.error(f"Erreur dans l'analyse pour {crypto} : {e}")
+        buy_signal, stop_loss, take_profit = analyze_signals(prices, model)
+        if buy_signal:
+            bot.send_message(CHAT_ID, f »Buy signal detected for {crypto}!\nStop Loss: {stop_loss}\nTake Profit: {take_profit} »)
+        else:
+            bot.send_message(CHAT_ID, f »No signal detected for {crypto} »)
 
-# Route Flask pour déclencher l'analyse
-@app.route("/analyze", methods=["POST"])
-def analyze():
-    try:
-        # Charger les données et entraîner le modèle
-        data = fetch_crypto_data("BTC-USD", "5y")
+# Fonction de logique de trading
+def trading_logic():
+    while True:
+        # Charger des données historiques pour l’entraînement (à remplacer par vos propres données)
+        data = fetch_crypto_data(« BTC-USD », « 5y »)
+        # Créer des features (indicateurs techniques)
         features = calculate_indicators(data)
-        targets = np.random.randint(0, 2, len(features))  # Exemple de données cibles
+        # Créer des targets (signaux d’achat/vente basés sur une stratégie manuelle ou un autre modèle)
+        targets = np.random.randint(0, 2, len(features))  # Remplacer par des données réelles pour l’entraînement
+
+        # Entraîner le modèle
         model = train_ml_model(features, targets)
 
-        # Analyser les cryptomonnaies
-        with ThreadPoolExecutor() as executor:
-            executor.map(lambda crypto: analyze_crypto(crypto, model), CRYPTO_LIST)
+        # Analyser les cryptos
+        for crypto in CRYPTO_LIST:
+            analyze_crypto(crypto, model)
 
-        return {"status": "success", "message": "Analyse terminée"}, 200
-    except Exception as e:
-        logging.error(f"Erreur dans la route /analyze : {e}")
-        return {"status": "error", "message": str(e)}, 500
+        time.sleep(300)  # Attendre 5 minutes avant de vérifier à nouveau
 
-# Démarrage de l'application
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+# Lancer la logique de trading dans un thread séparé
+def start_trading():
+    trading_thread = threading.Thread(target=trading_logic)
+    trading_thread.daemon = True
+    trading_thread.start()
+
+# Démarrer Flask et la logique de trading en parallèle
+if __name__ == « __main__ »:
+    start_trading()  # Lancer la logique de trading en parallèle
+    app.run(host=« 0.0.0.0 », port=10000)  # Démarrer Flask
