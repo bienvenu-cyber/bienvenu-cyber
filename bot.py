@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from flask import Flask
 from gunicorn.app.base import BaseApplication
 
-# Charger les variables d'environnement depuis Render (pas besoin de fichier .env)
+# Charger les variables d'environnement depuis Render
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Clé API de Telegram
 CHAT_ID = os.getenv("CHAT_ID")  # ID du chat Telegram
 PORT = int(os.getenv("PORT", 8000))  # Si PORT n'est pas défini, utiliser 8000 par défaut
@@ -44,42 +44,31 @@ def fetch_crypto_data(crypto_id):
         print(f"Erreur lors de la récupération des données pour {crypto_id}: {response.status_code}")
         return None
 
-# Fonction pour entraîner un modèle simple de machine learning
-def train_ml_model():
-    # Données historiques fictives (à remplacer par des données réelles pour un entraînement sérieux)
-    np.random.seed(42)
-    data = np.random.randn(1000, 5)  # 5 indicateurs (Moyennes mobiles, MACD, etc.)
-    target = np.random.randint(0, 2, 1000)  # 0: Pas de signal, 1: Signal d'achat
-
-    # Division des données en ensemble d'entraînement et de test
-    X_train, X_test, y_train, y_test = train_test_split(data, target, test_size=0.2, random_state=42)
-
-    # Modèle de régression logistique
-    model = LogisticRegression()
-    model.fit(X_train, y_train)
-
-    return model
-
-# Fonction pour analyser les signaux avec le modèle ML
-def analyze_signals(prices, model):
-    sma_short = prices[-10:].mean()
-    sma_long = prices[-20:].mean()
-    ema_short = prices[-12:].mean()
-    ema_long = prices[-26:].mean()
-    macd = ema_short - ema_long
-    sma = prices[-20:].mean()
-    std_dev = prices[-20:].std()
-    atr = std_dev  # ATR simple basé sur l'écart-type
-    upper_band = sma + (2 * std_dev)
-    lower_band = sma - (2 * std_dev)
-
-    features = np.array([sma_short, sma_long, macd, upper_band, lower_band]).reshape(1, -1)
-    prediction = model.predict(features)
+# Calcul des indicateurs techniques
+def calculate_indicators(prices):
+    # Calcul des moyennes mobiles (SMA)
+    sma_short = np.mean(prices[-10:])
+    sma_long = np.mean(prices[-30:])
     
-    buy_signal = prediction[0] == 1
+    # Calcul du MACD
+    ema_short = np.mean(prices[-12:])
+    ema_long = np.mean(prices[-26:])
+    macd = ema_short - ema_long
+    
+    # Calcul de l'ATR (simplifié ici comme écart-type)
+    atr = np.std(prices[-20:])
+    
+    return sma_short, sma_long, macd, atr
+
+# Fonction pour analyser les signaux avec les indicateurs techniques
+def analyze_signals(prices):
+    sma_short, sma_long, macd, atr = calculate_indicators(prices)
+    
+    # Règles de trading simples
+    buy_signal = sma_short > sma_long and macd > 0
     stop_loss = prices[-1] - 2 * atr
     take_profit = prices[-1] + 3 * atr
-
+    
     return buy_signal, stop_loss, take_profit
 
 # Fonction pour suivre les performances
@@ -94,11 +83,11 @@ def log_performance(crypto, price, stop_loss, take_profit, result):
     df = pd.DataFrame(data)
     df.to_csv(PERFORMANCE_LOG, mode='a', index=False, header=not pd.io.common.file_exists(PERFORMANCE_LOG))
 
-# Fonction pour analyser une crypto
-def analyze_crypto(crypto, model):
+# Fonction pour analyser une crypto et passer un ordre réel
+def analyze_crypto(crypto):
     prices = fetch_crypto_data(crypto)
     if prices is not None:
-        buy_signal, stop_loss, take_profit = analyze_signals(prices, model)
+        buy_signal, stop_loss, take_profit = analyze_signals(prices)
         if buy_signal:
             message = (
                 f"Signal de trading détecté pour {crypto.capitalize()} 🟢\n"
@@ -119,10 +108,9 @@ def home():
 
 # Fonction principale
 def main():
-    model = train_ml_model()  # Entraîner le modèle ML
     while True:
         with ThreadPoolExecutor() as executor:
-            executor.map(lambda crypto: analyze_crypto(crypto, model), CRYPTO_LIST)
+            executor.map(analyze_crypto, CRYPTO_LIST)
         time.sleep(300)  # Attendre 5 minutes avant de vérifier à nouveau
 
 # Classe Gunicorn pour démarrer l'application Flask avec Gunicorn
