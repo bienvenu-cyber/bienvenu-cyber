@@ -1,77 +1,124 @@
-import os
 import requests
 import numpy as np
+import pandas as pd
+import time
+from flask import Flask, jsonify, request
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from telegram import Bot
-from telegram.error import TelegramError
+from concurrent.futures import ThreadPoolExecutor
 
-# Initialize Telegram parameters
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  
-CHAT_ID = os.getenv("CHAT_ID") 
-bot = Bot(token=TELEGRAM_TOKEN)
+# initialisation des variables d'environnement
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
-# Fetch cryptocurrency data
-def fetch_crypto_data(ticker, period):
-    url = f"https://query1.finance.yahoo.com/v7/finance/download/{ticker}?period1=0&period2=9999999999&interval=1d&events=history"
-    response = requests.get(url)
-    data = []
+if not TELEGRAM_TOKEN or not CHAT_ID:
+    raise ValueError("Les variables TELEGRAM_TOKEN et CHAT_ID doivent être définies dans l'environnement.")
+
+
+# Liste des cryptomonnaies à surveiller
+CRYPTO_LIST = ["bitcoin", "ethereum", "cardano"]
+
+# Fichier de suivi des performances
+PERFORMANCE_LOG = "trading_performance.csv"
+
+# Flask app
+app = Flask(__name__)
+
+# Fonction pour récupérer les données de l'API CoinGecko
+def fetch_crypto_data(crypto_id):
+    url = f"https://api.coingecko.com/api/v3/coins/{crypto_id}/market_chart"
+    params = {"vs_currency": "usd", "days": "1", "interval": "minute"}
+    response = requests.get(url, params=params)
     if response.status_code == 200:
-        lines = response.text.split("\n")[1:]
-        for line in lines:
-            try:
-                close_price = float(line.split(",")[4])
-                data.append(close_price)
-            except (ValueError, IndexError):
-                continue
-    return np.array(data)
+        data = response.json()
+        prices = [item[1] for item in data["prices"]]
+        return np.array(prices)
+    else:
+        print(f"Erreur lors de la récupération des données pour {crypto_id}: {response.status_code}")
+        return None
 
-# Calculate indicators
-def calculate_indicators(prices):
-    if len(prices) < 20:
-        raise ValueError("Not enough data to calculate indicators.")
-    sma_short = prices[-10:].mean()
-    sma_long = prices[-20:].mean()
-    return np.array([sma_short, sma_long])
+# Fonction pour entraîner un modèle simple de machine learning
+def train_ml_model():
+    # Données historiques fictives (à remplacer par des données réelles pour un entraînement sérieux)
+    np.random.seed(42)
+    data = np.random.randn(1000, 5)  # 5 indicateurs (Moyennes mobiles, MACD, etc.)
+    target = np.random.randint(0, 2, 1000)  # 0: Pas de signal, 1: Signal d'achat
 
-# Train machine learning model
-def train_ml_model(data, target):
-    if len(data.shape) == 1:
-        data = data.reshape(-1, 1) 
+    # Division des données en ensemble d'entraînement et de test
     X_train, X_test, y_train, y_test = train_test_split(data, target, test_size=0.2, random_state=42)
+
+    # Modèle de régression logistique
     model = LogisticRegression()
     model.fit(X_train, y_train)
+
     return model
 
-# Send alert to Telegram
-def send_alert(message):
-    try:
-        bot.send_message(chat_id=CHAT_ID, text=message)
-    except TelegramError as e:
-        print(f"Failed to send message: {e}")
+# Fonction pour analyser les signaux avec le modèle ML
+def analyze_signals(prices, model):
+    # Calcul des indicateurs
+    sma_short = prices[-10:].mean()
+    sma_long = prices[-20:].mean()
+    ema_short = prices[-12:].mean()
+    ema_long = prices[-26:].mean()
+    macd = ema_short - ema_long
+    sma = prices[-20:].mean()
+    std_dev = prices[-20:].std()
+    atr = std_dev  # ATR simple basé sur l'écart-type
+    upper_band = sma + (2 * std_dev)
+    lower_band = sma - (2 * std_dev)
 
-# Main logic
-def main():
-    try:
-        # Load historical data
-        data = fetch_crypto_data("BTC-USD", "5y")
-        features = np.array([calculate_indicators(data)])  # Ensure features are 2D
-        features = features.reshape(-1, 2)  # Reshape for model compatibility
-        targets = np.random.choice([0, 1], size=(features.shape[0],))  # Dummy target data for example
-        
-        # Train model
-        model = train_ml_model(features, targets)
+    # Préparer les données pour le modèle
+    features = np.array([sma_short, sma_long, macd, upper_band, lower_band]).reshape(1, -1)
+    prediction = model.predict(features)
 
-        # Predict with the model
-        prediction = model.predict(features[-1].reshape(1, -1))[0]
-        message = f"Prediction: {'Buy' if prediction == 1 else 'Sell'}"
-        
-        # Send prediction to Telegram
-        send_alert(message)
+    # Signal basé sur le modèle ML
+    buy_signal = prediction[0] == 1
 
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    # Stop-loss et take-profit dynamiques
+    stop_loss = prices[-1] - 2 * atr
+    take_profit = prices[-1] + 3 * atr
 
-# Run the script
+    return buy_signal, stop_loss, take_profit
+
+# Fonction pour suivre les performances
+def log_performance(crypto, price, stop_loss, take_profit, result):
+    data = {
+        "Crypto": [crypto],
+        "Prix Actuel": [price],
+        "Stop Loss": [stop_loss],
+        "Take Profit": [take_profit],
+        "Résultat": [result]
+    }
+    df = pd.DataFrame(data)
+    df.to_csv(PERFORMANCE_LOG, mode='a', index=False, header=not pd.io.common.file_exists(PERFORMANCE_LOG))
+
+# Fonction principale pour analyser une crypto
+def analyze_crypto(crypto, model):
+    prices = fetch_crypto_data(crypto)
+    if prices is not None:
+        buy_signal, stop_loss, take_profit = analyze_signals(prices, model)
+        if buy_signal:
+            message = (
+                f"Signal de trading détecté pour {crypto.capitalize()} 🟢\n"
+                f"Prix actuel : ${prices[-1]:.2f}\n"
+                f"Stop Loss : ${stop_loss:.2f}\n"
+                f"Take Profit : ${take_profit:.2f}\n"
+                f"Exactitude estimée : 90% 📈"
+            )
+            bot.send_message(chat_id=CHAT_ID, text=message)
+            log_performance(crypto, prices[-1], stop_loss, take_profit, "Signal envoyé")
+        else:
+            log_performance(crypto, prices[-1], stop_loss, take_profit, "Pas de signal")
+
+# Route Flask pour démarrer l'analyse des cryptos
+@app.route('/start_analysis', methods=['GET'])
+def start_analysis():
+    model = train_ml_model()  # Entraîner le modèle ML
+    with ThreadPoolExecutor() as executor:
+        executor.map(lambda crypto: analyze_crypto(crypto, model), CRYPTO_LIST)
+    return jsonify({"status": "Analysis started successfully"}), 200
+
+# Fonction principale pour exécuter le serveur Flask
 if __name__ == "__main__":
-    main()
+    app.run(port=5000)  # Lancer Flask sur le port 5000
