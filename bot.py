@@ -13,7 +13,7 @@ from flask import jsonify
 # Charger les variables d'environnement depuis Render
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Clé API de Telegram
 CHAT_ID = os.getenv("CHAT_ID")  # ID du chat Telegram
-PORT = int(os.getenv("PORT", 5000))  # Port pour l'application Flask
+PORT = int(os.getenv("PORT", 10000))  # Port pour l'application Flask
 
 # Vérification des variables d'environnement
 if not TELEGRAM_TOKEN or not CHAT_ID:
