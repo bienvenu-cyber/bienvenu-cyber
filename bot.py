@@ -13,42 +13,42 @@ import logging
 from datetime import datetime
 from time import sleep
 
-# Charger les variables d’environnement depuis Render
-TELEGRAM_TOKEN = os.getenv(« TELEGRAM_TOKEN »)  # Clé API de Telegram
-CHAT_ID = os.getenv(« CHAT_ID »)  # ID du chat Telegram
-PORT = int(os.getenv(« PORT », 8000))  # Si PORT n’est pas défini, utiliser 8000 par défaut
+# Charger les variables d'environnement depuis Render
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Clé API de Telegram
+CHAT_ID = os.getenv("CHAT_ID")  # ID du chat Telegram
+PORT = int(os.getenv("PORT", 8000))  # Si PORT n'est pas défini, utiliser 8000 par défaut
 
-# Vérification des variables d’environnement
+# Vérification des variables d'environnement
 if not TELEGRAM_TOKEN or not CHAT_ID:
-    raise ValueError(« Les variables d’environnement TELEGRAM_TOKEN ou CHAT_ID ne sont pas définies. »)
+    raise ValueError("Les variables d'environnement TELEGRAM_TOKEN ou CHAT_ID ne sont pas définies.")
 
 # Initialisation du bot Telegram
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # Liste des cryptomonnaies à surveiller
-CRYPTO_LIST = [« bitcoin », « ethereum », « cardano »]
+CRYPTO_LIST = ["bitcoin", "ethereum", "cardano"]
 
 # Fichier de suivi des performances
-PERFORMANCE_LOG = « trading_performance.csv »
+PERFORMANCE_LOG = "trading_performance.csv"
 
-# Initialisation de l’application Flask
+# Initialisation de l'application Flask
 app = Flask(__name__)
 
 # Configurer le logger pour enregistrer les erreurs et autres informations utiles
-logging.basicConfig(filename=‘trading_bot.log’, level=logging.INFO)
+logging.basicConfig(filename='trading_bot.log', level=logging.INFO)
 
-# Fonction pour récupérer les données de l’API CoinGecko avec gestion des erreurs
+# Fonction pour récupérer les données de l'API CoinGecko avec gestion des erreurs
 def fetch_crypto_data(crypto_id):
-    url = f »https://api.coingecko.com/api/v3/coins/{crypto_id}/market_chart »
-    params = {« vs_currency »: « usd », « days »: « 1 », « interval »: « minute »}
+    url = f"https://api.coingecko.com/api/v3/coins/{crypto_id}/market_chart"
+    params = {"vs_currency": "usd", "days": "1", "interval": "minute"}
     try:
         response = requests.get(url, params=params)
-        response.raise_for_status()  # Lève une exception pour une réponse d’erreur (4xx, 5xx)
+        response.raise_for_status()  # Lève une exception pour une réponse d'erreur (4xx, 5xx)
         data = response.json()
-        prices = [item[1] for item in data[« prices »]]
+        prices = [item[1] for item in data["prices"]]
         return np.array(prices)
     except requests.exceptions.RequestException as e:
-        logging.error(f »Erreur API pour {crypto_id}: {e} »)
+        logging.error(f"Erreur API pour {crypto_id}: {e}")
         return None
 
 # Calcul des indicateurs techniques avec une fenêtre glissante pour les moyennes mobiles
@@ -62,7 +62,7 @@ def calculate_indicators(prices):
     ema_long = np.mean(prices[-26:])
     macd = ema_short - ema_long
     
-    # Calcul de l’ATR (simplifié ici comme écart-type)
+    # Calcul de l'ATR (simplifié ici comme écart-type)
     atr = np.std(prices[-20:])
     
     return sma_short, sma_long, macd, atr
@@ -81,44 +81,44 @@ def analyze_signals(prices):
 # Fonction pour suivre les performances avec plus de détails
 def log_performance(crypto, price, stop_loss, take_profit, result, timestamp):
     data = {
-        « Crypto »: [crypto],
-        « Prix Actuel »: [price],
-        « Stop Loss »: [stop_loss],
-        « Take Profit »: [take_profit],
-        « Résultat »: [result],
-        « Timestamp »: [timestamp]
+        "Crypto": [crypto],
+        "Prix Actuel": [price],
+        "Stop Loss": [stop_loss],
+        "Take Profit": [take_profit],
+        "Résultat": [result],
+        "Timestamp": [timestamp]
     }
     df = pd.DataFrame(data)
-    df.to_csv(PERFORMANCE_LOG, mode=‘a’, index=False, header=not pd.io.common.file_exists(PERFORMANCE_LOG))
+    df.to_csv(PERFORMANCE_LOG, mode='a', index=False, header=not pd.io.common.file_exists(PERFORMANCE_LOG))
 
 # Fonction pour analyser une crypto et passer un ordre réel
 def analyze_crypto(crypto):
     prices = fetch_crypto_data(crypto)
     if prices is not None:
         buy_signal, stop_loss, take_profit = analyze_signals(prices)
-        timestamp = datetime.now().strftime(‘%Y-%m-%d %H:%M:%S’)
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         if buy_signal:
             message = (
-                f »Signal de trading détecté pour {crypto.capitalize()} 🟢\n »
-                f »Prix actuel : ${prices[-1]:.2f}\n »
-                f »Stop Loss : ${stop_loss:.2f}\n »
-                f »Take Profit : ${take_profit:.2f}\n »
-                f »Exactitude estimée : 90% 📈 »
+                f"Signal de trading détecté pour {crypto.capitalize()} 🟢\n"
+                f"Prix actuel : ${prices[-1]:.2f}\n"
+                f"Stop Loss : ${stop_loss:.2f}\n"
+                f"Take Profit : ${take_profit:.2f}\n"
+                f"Exactitude estimée : 90% 📈"
             )
             try:
                 bot.send_message(chat_id=CHAT_ID, text=message)
-                logging.info(f »Signal envoyé pour {crypto} à {timestamp} »)
-                log_performance(crypto, prices[-1], stop_loss, take_profit, « Signal envoyé », timestamp)
+                logging.info(f"Signal envoyé pour {crypto} à {timestamp}")
+                log_performance(crypto, prices[-1], stop_loss, take_profit, "Signal envoyé", timestamp)
             except Exception as e:
-                logging.error(f »Erreur en envoyant le message Telegram pour {crypto}: {e} »)
-                log_performance(crypto, prices[-1], stop_loss, take_profit, « Erreur d’envoi », timestamp)
+                logging.error(f"Erreur en envoyant le message Telegram pour {crypto}: {e}")
+                log_performance(crypto, prices[-1], stop_loss, take_profit, "Erreur d'envoi", timestamp)
         else:
-            log_performance(crypto, prices[-1], stop_loss, take_profit, « Pas de signal », timestamp)
+            log_performance(crypto, prices[-1], stop_loss, take_profit, "Pas de signal", timestamp)
 
 # Route de base pour Flask
-@app.route(‘/‘)
+@app.route('/')
 def home():
-    return « Bot is running! »
+    return "Bot is running!"
 
 # Fonction principale avec délai dynamique
 def dynamic_sleep(last_signal_time):
@@ -132,10 +132,10 @@ def main():
     while True:
         with ThreadPoolExecutor() as executor:
             executor.map(analyze_crypto, CRYPTO_LIST)
-        last_signal_time = time.time()  # Met à jour l’heure du dernier signal
+        last_signal_time = time.time()  # Met à jour l'heure du dernier signal
         sleep(dynamic_sleep(last_signal_time))  # Attendre dynamiquement avant de vérifier à nouveau
 
-# Classe Gunicorn pour démarrer l’application Flask avec Gunicorn
+# Classe Gunicorn pour démarrer l'application Flask avec Gunicorn
 class GunicornApp(BaseApplication):
     def __init__(self, app):
         self.app = app
@@ -148,5 +148,5 @@ class GunicornApp(BaseApplication):
         super().run()
 
 # Si exécuté directement, démarre le serveur avec Gunicorn
-if __name__ == « __main__ »:
+if __name__ == "__main__":
     GunicornApp(app).run()
