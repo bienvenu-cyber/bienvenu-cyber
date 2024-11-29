@@ -1,152 +1,76 @@
 import os
-import requests
-import numpy as np
-import pandas as pd
-import time
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
-from telegram import Bot
-from concurrent.futures import ThreadPoolExecutor
-from flask import Flask
-from gunicorn.app.base import BaseApplication
 import logging
-from datetime import datetime
-from time import sleep
+import requests
+from flask import Flask, request, jsonify
+import time
 
-# Charger les variables d'environnement depuis Render
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Clé API de Telegram
-CHAT_ID = os.getenv("CHAT_ID")  # ID du chat Telegram
-PORT = int(os.getenv("PORT", 8000))  # Si PORT n'est pas défini, utiliser 8000 par défaut
-
-# Vérification des variables d'environnement
-if not TELEGRAM_TOKEN or not CHAT_ID:
-    raise ValueError("Les variables d'environnement TELEGRAM_TOKEN ou CHAT_ID ne sont pas définies.")
-
-# Initialisation du bot Telegram
-bot = Bot(token=TELEGRAM_TOKEN)
-
-# Liste des cryptomonnaies à surveiller
-CRYPTO_LIST = ["bitcoin", "ethereum", "cardano"]
-
-# Fichier de suivi des performances
-PERFORMANCE_LOG = "trading_performance.csv"
-
-# Initialisation de l'application Flask
+# Configuration de l'application Flask
 app = Flask(__name__)
 
-# Configurer le logger pour enregistrer les erreurs et autres informations utiles
-logging.basicConfig(filename='trading_bot.log', level=logging.INFO)
+# Variables pour Telegram
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")  # Clé API de Telegram
+CHAT_ID = os.getenv("CHAT_ID")  # ID du chat Telegram
 
-# Fonction pour récupérer les données de l'API CoinGecko avec gestion des erreurs
-def fetch_crypto_data(crypto_id):
-    url = f"https://api.coingecko.com/api/v3/coins/{crypto_id}/market_chart"
-    params = {"vs_currency": "usd", "days": "1", "interval": "minute"}
+# Configuration des logs
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Fonction pour envoyer un message sur Telegram
+def send_telegram_message(message):
     try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()  # Lève une exception pour une réponse d'erreur (4xx, 5xx)
-        data = response.json()
-        prices = [item[1] for item in data["prices"]]
-        return np.array(prices)
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Erreur API pour {crypto_id}: {e}")
-        return None
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        payload = {'chat_id': CHAT_ID, 'text': message}
+        response = requests.get(url, params=payload)
+        
+        # Affiche la réponse de l'API pour vérifier l'envoi du message
+        logger.info(f"Réponse de Telegram: {response.json()}")
 
-# Calcul des indicateurs techniques avec une fenêtre glissante pour les moyennes mobiles
-def calculate_indicators(prices):
-    # Calcul des moyennes mobiles (SMA)
-    sma_short = np.mean(prices[-10:])
-    sma_long = np.mean(prices[-30:])
-    
-    # Calcul du MACD
-    ema_short = np.mean(prices[-12:])
-    ema_long = np.mean(prices[-26:])
-    macd = ema_short - ema_long
-    
-    # Calcul de l'ATR (simplifié ici comme écart-type)
-    atr = np.std(prices[-20:])
-    
-    return sma_short, sma_long, macd, atr
-
-# Fonction pour analyser les signaux avec les indicateurs techniques
-def analyze_signals(prices):
-    sma_short, sma_long, macd, atr = calculate_indicators(prices)
-    
-    # Règles de trading simples
-    buy_signal = sma_short > sma_long and macd > 0
-    stop_loss = prices[-1] - 2 * atr
-    take_profit = prices[-1] + 3 * atr
-    
-    return buy_signal, stop_loss, take_profit
-
-# Fonction pour suivre les performances avec plus de détails
-def log_performance(crypto, price, stop_loss, take_profit, result, timestamp):
-    data = {
-        "Crypto": [crypto],
-        "Prix Actuel": [price],
-        "Stop Loss": [stop_loss],
-        "Take Profit": [take_profit],
-        "Résultat": [result],
-        "Timestamp": [timestamp]
-    }
-    df = pd.DataFrame(data)
-    df.to_csv(PERFORMANCE_LOG, mode='a', index=False, header=not pd.io.common.file_exists(PERFORMANCE_LOG))
-
-# Fonction pour analyser une crypto et passer un ordre réel
-def analyze_crypto(crypto):
-    prices = fetch_crypto_data(crypto)
-    if prices is not None:
-        buy_signal, stop_loss, take_profit = analyze_signals(prices)
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        if buy_signal:
-            message = (
-                f"Signal de trading détecté pour {crypto.capitalize()} 🟢\n"
-                f"Prix actuel : ${prices[-1]:.2f}\n"
-                f"Stop Loss : ${stop_loss:.2f}\n"
-                f"Take Profit : ${take_profit:.2f}\n"
-                f"Exactitude estimée : 90% 📈"
-            )
-            try:
-                bot.send_message(chat_id=CHAT_ID, text=message)
-                logging.info(f"Signal envoyé pour {crypto} à {timestamp}")
-                log_performance(crypto, prices[-1], stop_loss, take_profit, "Signal envoyé", timestamp)
-            except Exception as e:
-                logging.error(f"Erreur en envoyant le message Telegram pour {crypto}: {e}")
-                log_performance(crypto, prices[-1], stop_loss, take_profit, "Erreur d'envoi", timestamp)
+        if response.status_code != 200:
+            logger.error(f"Erreur en envoyant le message : {response.status_code}")
         else:
-            log_performance(crypto, prices[-1], stop_loss, take_profit, "Pas de signal", timestamp)
+            logger.info(f"Message envoyé à {CHAT_ID}: {message}")
+    except Exception as e:
+        logger.error(f"Erreur dans l'envoi du message Telegram : {e}")
 
-# Route de base pour Flask
+# Test de l'envoi d'un message à Telegram
+def test_telegram_connection():
+    send_telegram_message("Test message envoyé par le bot")
+
+# Route principale de l'application
 @app.route('/')
 def home():
-    return "Bot is running!"
+    # Tester la connexion et envoyer un message
+    test_telegram_connection()
+    
+    # Exemple d'envoi d'un message quand une condition est remplie
+    send_telegram_message("Le service est en ligne et fonctionne.")
+    
+    # Message de bienvenue dès que le bot commence à fonctionner
+    send_telegram_message("Bot ready to make some cash!")
 
-# Fonction principale avec délai dynamique
-def dynamic_sleep(last_signal_time):
-    time_since_last_signal = time.time() - last_signal_time
-    if time_since_last_signal < 300:  # Si un signal récent, réduit le délai
-        return 180  # Attente de 3 minutes
-    return 300  # Sinon, attends 5 minutes
+    return "Bot en ligne et prêt à envoyer des messages."
 
-def main():
-    last_signal_time = time.time()  # Temps du dernier signal
-    while True:
-        with ThreadPoolExecutor() as executor:
-            executor.map(analyze_crypto, CRYPTO_LIST)
-        last_signal_time = time.time()  # Met à jour l'heure du dernier signal
-        sleep(dynamic_sleep(last_signal_time))  # Attendre dynamiquement avant de vérifier à nouveau
+# Route pour traiter les requêtes
+@app.route('/signal', methods=['POST'])
+def handle_signal():
+    try:
+        data = request.json
+        logger.info(f"Signal reçu : {data}")
+        
+        # Logique d'envoi du signal de trading
+        if "signal" in data:
+            signal = data["signal"]
+            send_telegram_message(f"Signal de trading reçu: {signal}")
+            logger.info("Signal envoyé à Telegram")
+        else:
+            logger.warning("Aucun signal trouvé dans les données reçues")
+            return jsonify({"error": "Signal non trouvé"}), 400
+    except Exception as e:
+        logger.error(f"Erreur lors du traitement du signal: {e}")
+        return jsonify({"error": str(e)}), 500
+    
+    return jsonify({"status": "success"}), 200
 
-# Classe Gunicorn pour démarrer l'application Flask avec Gunicorn
-class GunicornApp(BaseApplication):
-    def __init__(self, app):
-        self.app = app
-        super().__init__()
-
-    def load(self):
-        return self.app
-
-    def run(self):
-        super().run()
-
-# Si exécuté directement, démarre le serveur avec Gunicorn
-if __name__ == "__main__":
-    GunicornApp(app).run()
+# Démarrage de l'application
+if __name__ == '__main__':
+    app.run(debug=True, host="0.0.0.0", port=8000)
